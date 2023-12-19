@@ -75,7 +75,7 @@ class CervicalProbe:
 probe = CervicalProbe()
 q = Queue()
 probe.handle_stream(q)
-time.sleep(2)
+time.sleep(1)
 # Read everything currently in the queue
 items = []
 while not q.empty():
@@ -87,5 +87,7 @@ while not q.empty():
         break
 
 # 'items' now contains all the elements that were in the queue
-print(items)
+num_items = len(items)
+print(num_items)
+#print(items)
 probe.stop_stream()
