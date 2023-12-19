@@ -11,4 +11,6 @@ class ProbeBuffer:
         self.bufdata: np.ndarray = np.zeros((self.bufsize, num_channels))
     
     def add_data(self, data: np.ndarray):
-        n = 
+        n = len(data)
+        self.bufdata[:-n] = self.bufdata[n:]
+        self.bufdata[-n:] = data
