@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
         self.barx = 1
         self.bar_height = 5
         self.graphWidget2 = pg.BarGraphItem(x = self.x, height = self.bar_height, x0 = 1, x1 = 2)
-        self.setCentralWidget(self.graphWidget2)
+        self.setCentralWidget(self.graphWidget1)
 
         # Create an instance of the probe
         self.probe = pc.CervicalProbe()
@@ -32,10 +32,11 @@ class MainWindow(QMainWindow):
         # Create the data buffer to hold the data
         self.data_buffer = pb.ProbeBuffer(self.num_channels, self.fs)
         # Initialize the stream
-        self.probe.handle_stream_spoof(self.data_q)
+        self.probe.handle_stream(self.data_q)
 
         # This is where we plot the data
-        self.data_line = self.graphWidget.plot([], [])
+        self.force_line = self.graphWidget1.plot([], [], pen = 'red')
+        self.pos_line  = self.graphWidget1.plot([], [], pen = 'green')
 
         self.init_ui()
 
@@ -50,7 +51,7 @@ class MainWindow(QMainWindow):
 
         # Main Layout
         layout = QVBoxLayout()
-        layout.addWidget(self.graphWidget)
+        layout.addWidget(self.graphWidget1)
 
         # Lower Sublayout (Holds buttons)
         sublay2 = QHBoxLayout()
@@ -87,12 +88,15 @@ class MainWindow(QMainWindow):
     def update_plot_data(self):
         """ Graphs data from the probe data buffer"""
         self.queue_to_buffer()
-        y = self.data_buffer.bufdata[:,1]  # Replace with real data
-        x = list(range(len(y)))  # Replace with real data
+        y_force = self.data_buffer.bufdata[:,1] 
+        y_pos = self.data_buffer.bufdata[:,0]
+        x = list(range(len(y_force))) 
         
-        new_height = y[-1]
-        self.graphWidget2.setOpts(height=new_height)
-        self.data_line.setData(x, y)  # Update the data
+        new_height = y_force[-1]
+        #self.graphWidget2.setOpts(height=new_height)
+        self.force_line.setData(x, y_force)  # Update the data
+        self.pos_line.setData(x, y_pos)
+
     
     def queue_to_buffer(self):
         """ Pulls data from the """
@@ -104,7 +108,11 @@ class MainWindow(QMainWindow):
             except self.data_q.Empty:
                 # This exception is thrown if the queue was empty. Break the loop.
                 break
-        self.data_buffer.add_data(items)
+        # attempt to add to the buffer
+        try:
+            self.data_buffer.add_data(items)
+        except:
+            pass
 
     def interp_state():
         print("Current State:")
