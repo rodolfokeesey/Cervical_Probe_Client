@@ -4,8 +4,8 @@ import time
 from queue import Queue
 import probe_buffer as pb
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget
-from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QTreeView, QFileSystemModel, QListView
+from PyQt5.QtCore import QTimer, QDir
 from pyqtgraph import PlotWidget
 import pyqtgraph as pg
 import random
@@ -48,8 +48,30 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         """ Initializes the user interface. Defines the button and graph layout"""
 
+        # Main Layout ()
+        main_layout = QHBoxLayout()
 
-        # Main Layout
+        # Sets up file system model
+        model = QFileSystemModel()
+        model.setRootPath(QDir.rootPath())
+
+        tree = QTreeView()
+        tree.setModel(model)
+        tree.setRootIndex(model.index(QDir.rootPath()))
+        tree.setColumnWidth(0, 250)
+        tree.setSortingEnabled(True)
+
+        
+        # File Explorer Layout (column 1)
+        col1 = QVBoxLayout()
+
+        # Add the tree view
+        col1.addWidget(tree)
+
+
+        # Call back Plot Layout (column 2)
+
+        # Real Time Plot Layout (column 3)
         layout = QVBoxLayout()
         layout.addWidget(self.graphWidget1)
 
@@ -66,11 +88,15 @@ class MainWindow(QMainWindow):
         ext_btn.clicked.connect(self.extend_probe)  # Connect to a function
         sublay2.addWidget(ext_btn)
 
-        # Making the final layout
+        # Column 3, making the final layout
         layout.addLayout(sublay2)
 
+        # Final layout
+        main_layout.addLayout(col1)
+        main_layout.addLayout(layout)
+
         container = QWidget()
-        container.setLayout(layout)
+        container.setLayout(main_layout)
         self.setCentralWidget(container)
     
     def closeEvent(self, event):
