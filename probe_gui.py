@@ -4,17 +4,25 @@ import time
 from queue import Queue
 import probe_buffer as pb
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QTreeView, QFileSystemModel, QRadioButton
+from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QTreeView, QFileSystemModel, QRadioButton, QLineEdit, QLabel
 from PyQt5.QtCore import QTimer, QDir
 from pyqtgraph import PlotWidget
 import pyqtgraph as pg
+import os
 import random
 import threading
+import copy
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        # Initialize the pathing
+        self.current_directory = os.getcwd()
+        print("Current directory:", self.current_directory)
+        self.data_path = os.path.join(self.current_directory, "data")
+        print("Current data directory:", self.data_path)
 
         # Initialize the graphs
 
@@ -33,11 +41,7 @@ class MainWindow(QMainWindow):
         self.data_q = Queue()
         # Initialize data session list to be saved
         self.data_session = []
-
-        # Initialize the recording flag
-        self.Recording = False
-        # Initialize the busy flag
-        self.Busy = False
+        self.loaded_data = []
 
         # Initialize the probe state estimation
         # Idea! Use a kalman filter to estimate the state of the probe.
@@ -55,11 +59,24 @@ class MainWindow(QMainWindow):
         self.probe.handle_stream(self.data_q)
 
         # This is where we plot the data
+        # Real time feed
         self.force_line = self.graphWidget1.plot([], [], pen = 'red')
         self.pos_line  = self.graphWidget2.plot([], [], pen = 'green')
 
+        # Callback feed
+        self.recall_force_line = self.recall_pos.plot([], [], pen = 'red')
+        self.recall_pos_line  = self.recall_force.plot([], [], pen = 'green')
+
         self.init_ui()
 
+        # Initialize the timer to record all the data in the buffer
+        self.record_timer = QTimer()
+        self.record_timer.setSingleShot(True)
+        self.record_timer.setInterval(5000)  # Interval in milliseconds
+        self.record_timer.timeout.connect(self.record_buffer)
+
+
+        # Initialize the timer to update the live plot
         self.timer = QTimer()
         self.timer.setInterval(33)  # Interval in milliseconds
         self.timer.timeout.connect(self.update_plot_data)
@@ -73,11 +90,11 @@ class MainWindow(QMainWindow):
 
         # Sets up file system model
         self.model = QFileSystemModel()
-        self.model.setRootPath(QDir.rootPath())
+        self.model.setRootPath(self.data_path)
 
         self.tree = QTreeView()
         self.tree.setModel(self.model)
-        self.tree.setRootIndex(self.model.index(QDir.rootPath()))
+        self.tree.setRootIndex(self.model.index(self.data_path))
         self.tree.setColumnWidth(0, 250)
         self.tree.setSortingEnabled(True)
         self.tree.selectionModel().selectionChanged.connect(self.onSelectionChanged)
@@ -115,6 +132,7 @@ class MainWindow(QMainWindow):
         sublay2 = QHBoxLayout()
 
         # Adding Buttons
+
         # Retract Button
         ret_btn = QPushButton('Retract', self)
         ret_btn.clicked.connect(self.retract_probe)  # Connect to a function
@@ -128,8 +146,24 @@ class MainWindow(QMainWindow):
         tst_btn.clicked.connect(self.test_stiffness)  # Connect to a function
         sublay2.addWidget(tst_btn)
 
+        # Last Sublayout (Holds the filename inputs, and the save command)
+        sublay3 = QHBoxLayout()
+
+        # Adding Filename Field Input
+        self.lineEdit = QLineEdit()
+        self.lineEdit.setPlaceholderText("Enter a filename here")
+        sublay3.addWidget(self.lineEdit)
+
+        # Extend Button
+        save_btn = QPushButton('Save Data', self)
+        save_btn.clicked.connect(self.save_data)  # Connect to a function
+        sublay2.addWidget(save_btn)
+
+
+
         # Column 3, making the final layout
         layout.addLayout(sublay2)
+        layout.addLayout(sublay3)
 
         # Final layout
         main_layout.addLayout(col1)
@@ -143,7 +177,8 @@ class MainWindow(QMainWindow):
     def onRecallSelect(self):
         """ Check which radio button is checked and perform actions """
         if self.radio1.isChecked():
-            print("Option 1 is selected.")
+            print("Displaying Current Session Data.")
+            self.update_callback_plot(self.data_session)
         elif self.radio2.isChecked():
             print("Option 2 is selected.")
 
@@ -175,10 +210,36 @@ class MainWindow(QMainWindow):
         y_pos = self.data_buffer.bufdata[:,0]
         x = list(range(len(y_force))) 
         
-        new_height = y_force[-1]
         #self.graphWidget2.setOpts(height=new_height)
         self.force_line.setData(x, y_force)  # Update the data
         self.pos_line.setData(x, y_pos)
+
+    def update_callback_plot(self, data_source):
+        """ Graphs data from the probe data buffer"""
+        y_force = data_source[:,1] 
+        y_pos = data_source[:,0]
+     
+        #self.graphWidget2.setOpts(height=new_height)
+        self.recall_force_line.setData(x, y_force)
+        self.recall_pos_line.setData(x, y_pos)
+    
+    def save_data(self):
+        """Writes all the data to the specified filename"""
+        filename = self.lineEdit.text()
+        print("Saving data to", filename)
+        if filename == "":
+            print("No filename entered.")
+            return
+        # Write the data to the specified file
+        final_path = os.path.join(self.data_path, filename)
+        np.save(final_path, self.data_session)
+
+
+    def record_buffer(self):
+        """ Records the data in the buffer to a file"""
+        print("Recording data...")
+        self.data_session = copy.deepcopy(self.data_buffer.bufdata)
+        print("Data recorded.")
 
     
     def queue_to_buffer(self):
@@ -219,6 +280,7 @@ class MainWindow(QMainWindow):
 
     def test_stiffness(self):
         """Creates a thread to call the stiffness test function"""
+        self.record_timer.start() 
         self.worker_thread = threading.Thread(
             target = self.test_stiffness_thread)
         self.worker_thread.start()
