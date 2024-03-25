@@ -4,11 +4,12 @@ import time
 from queue import Queue
 import probe_buffer as pb
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QTreeView, QFileSystemModel, QListView
+from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QTreeView, QFileSystemModel, QRadioButton
 from PyQt5.QtCore import QTimer, QDir
 from pyqtgraph import PlotWidget
 import pyqtgraph as pg
 import random
+import threading
 
 
 class MainWindow(QMainWindow):
@@ -16,16 +17,35 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # Initialize the graphs
+
+        # This is the graph for the real time position plot
         self.graphWidget1 = pg.PlotWidget()
-        self.barx = 1
-        self.bar_height = 5
-        self.graphWidget2 = pg.BarGraphItem(x = self.x, height = self.bar_height, x0 = 1, x1 = 2)
-        self.setCentralWidget(self.graphWidget1)
+        # This is the graph for the  real time force plot
+        self.graphWidget2 = pg.PlotWidget()
+        # This is the callback graph for a previous reading position
+        self.recall_pos = pg.PlotWidget()
+        # This is the callback graph for a previous reading force
+        self.recall_force = pg.PlotWidget()
 
         # Create an instance of the probe
         self.probe = pc.CervicalProbe()
         # Create the data queue to pass to the probe client
         self.data_q = Queue()
+        # Initialize data session list to be saved
+        self.data_session = []
+
+        # Initialize the recording flag
+        self.Recording = False
+        # Initialize the busy flag
+        self.Busy = False
+
+        # Initialize the probe state estimation
+        # Idea! Use a kalman filter to estimate the state of the probe.
+        # When I say state, I mean the position and force of the probe.
+        # When the probe is not moving AND there is no command in the queue,
+        # then self.Busy = False.
+
+
         # Initialize probe parameters
         self.num_channels = 2
         self.fs = 80
@@ -36,7 +56,7 @@ class MainWindow(QMainWindow):
 
         # This is where we plot the data
         self.force_line = self.graphWidget1.plot([], [], pen = 'red')
-        self.pos_line  = self.graphWidget1.plot([], [], pen = 'green')
+        self.pos_line  = self.graphWidget2.plot([], [], pen = 'green')
 
         self.init_ui()
 
@@ -52,28 +72,44 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout()
 
         # Sets up file system model
-        model = QFileSystemModel()
-        model.setRootPath(QDir.rootPath())
+        self.model = QFileSystemModel()
+        self.model.setRootPath(QDir.rootPath())
 
-        tree = QTreeView()
-        tree.setModel(model)
-        tree.setRootIndex(model.index(QDir.rootPath()))
-        tree.setColumnWidth(0, 250)
-        tree.setSortingEnabled(True)
+        self.tree = QTreeView()
+        self.tree.setModel(self.model)
+        self.tree.setRootIndex(self.model.index(QDir.rootPath()))
+        self.tree.setColumnWidth(0, 250)
+        self.tree.setSortingEnabled(True)
+        self.tree.selectionModel().selectionChanged.connect(self.onSelectionChanged)
 
         
         # File Explorer Layout (column 1)
         col1 = QVBoxLayout()
 
-        # Add the tree view
-        col1.addWidget(tree)
 
+        # Create Radio Buttons for recall mode:
+        self.radio1 = QRadioButton("Current Reading Mode")
+        self.radio2 = QRadioButton("Saved Reading Mode")
+        self.radio1.setChecked(True)
 
-        # Call back Plot Layout (column 2)
+        # Connect the signals to the slots
+        self.radio1.toggled.connect(self.onRecallSelect)
+        #self.radio2.toggled.connect(self.onRecallSelect)
+
+        # Add the tree view for the file explorer
+        col1.addWidget(self.radio1)
+        col1.addWidget(self.radio2)
+        col1.addWidget(self.tree)
+        
+        # Callback Plot Layout (column 2)
+        col2 = QVBoxLayout()
+        col2.addWidget(self.recall_pos)
+        col2.addWidget(self.recall_force)
 
         # Real Time Plot Layout (column 3)
         layout = QVBoxLayout()
         layout.addWidget(self.graphWidget1)
+        layout.addWidget(self.graphWidget2)
 
         # Lower Sublayout (Holds buttons)
         sublay2 = QHBoxLayout()
@@ -83,21 +119,42 @@ class MainWindow(QMainWindow):
         ret_btn = QPushButton('Retract', self)
         ret_btn.clicked.connect(self.retract_probe)  # Connect to a function
         sublay2.addWidget(ret_btn)
-        #Extend Button
+        # Extend Button
         ext_btn = QPushButton('Extend', self)
         ext_btn.clicked.connect(self.extend_probe)  # Connect to a function
         sublay2.addWidget(ext_btn)
+        # Test Stiffness Button
+        tst_btn = QPushButton('Test Stiffness', self)
+        tst_btn.clicked.connect(self.test_stiffness)  # Connect to a function
+        sublay2.addWidget(tst_btn)
 
         # Column 3, making the final layout
         layout.addLayout(sublay2)
 
         # Final layout
         main_layout.addLayout(col1)
+        main_layout.addLayout(col2)
         main_layout.addLayout(layout)
 
         container = QWidget()
         container.setLayout(main_layout)
         self.setCentralWidget(container)
+
+    def onRecallSelect(self):
+        """ Check which radio button is checked and perform actions """
+        if self.radio1.isChecked():
+            print("Option 1 is selected.")
+        elif self.radio2.isChecked():
+            print("Option 2 is selected.")
+
+    def onSelectionChanged(self, selected, deselected):
+        # Get the model index of the first selected item
+        index = self.tree.selectionModel().currentIndex()
+        # Check if the index is valid
+        if index.isValid():
+            # Get the file path from the model index
+            self.filePath = self.model.filePath(index)
+            print("Selected file:", self.filePath)
     
     def closeEvent(self, event):
         """ This function is called when the window is closing"""
@@ -157,6 +214,36 @@ class MainWindow(QMainWindow):
         try:
             self.probe.send_command("extend")
             print("Extending Probe...")
+        except:
+            print("Failed to send command")
+
+    def test_stiffness(self):
+        """Creates a thread to call the stiffness test function"""
+        self.worker_thread = threading.Thread(
+            target = self.test_stiffness_thread)
+        self.worker_thread.start()
+        # Make the thread a daemon
+        self.worker_thread.deamon = True
+
+    def test_stiffness_thread(self):
+        try:
+            print("Testing Stiffness...")
+            print("Trial One...")
+            self.probe.send_command("retract")
+            time.sleep(0.5)
+            self.probe.send_command("extend")
+            time.sleep(0.5)
+            self.probe.send_command("retract")
+            print("Trial Two...")
+            time.sleep(1)
+            self.probe.send_command("extend")
+            time.sleep(0.5)
+            self.probe.send_command("retract")
+            print("Trial Three...")
+            time.sleep(1)
+            self.probe.send_command("extend")
+            time.sleep(0.5)
+            self.probe.send_command("retract")
         except:
             print("Failed to send command")
 
