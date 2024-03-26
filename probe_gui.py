@@ -28,7 +28,7 @@ class MainWindow(QMainWindow):
 
         # This is the graph for the real time position plot
         self.graphWidget1 = pg.PlotWidget()
-        # This is the graph for the  real time force plot
+        # This is the graph for the real time force plot
         self.graphWidget2 = pg.PlotWidget()
         # This is the callback graph for a previous reading position
         self.recall_pos = pg.PlotWidget()
@@ -177,10 +177,17 @@ class MainWindow(QMainWindow):
     def onRecallSelect(self):
         """ Check which radio button is checked and perform actions """
         if self.radio1.isChecked():
-            print("Displaying Current Session Data.")
-            self.update_callback_plot(self.data_session)
+            try:
+                print("Displaying Current Session Data.")
+                self.update_callback_plot()
+            except:
+                print("No data to display.")
         elif self.radio2.isChecked():
-            print("Option 2 is selected.")
+            try:
+                print("Displaying Loaded Session Data.")
+                self.update_callback_plot()
+            except:
+                print("No data to display.")
 
     def onSelectionChanged(self, selected, deselected):
         # Get the model index of the first selected item
@@ -190,6 +197,13 @@ class MainWindow(QMainWindow):
             # Get the file path from the model index
             self.filePath = self.model.filePath(index)
             print("Selected file:", self.filePath)
+            self.load_data()
+            if self.radio2.isChecked():
+                try:
+                    print("Displaying Loaded Session Data.")
+                    self.update_callback_plot()
+                except:
+                    print("No data to display.")
     
     def closeEvent(self, event):
         """ This function is called when the window is closing"""
@@ -208,20 +222,34 @@ class MainWindow(QMainWindow):
         self.queue_to_buffer()
         y_force = self.data_buffer.bufdata[:,1] 
         y_pos = self.data_buffer.bufdata[:,0]
-        x = list(range(len(y_force))) 
+        x = list(range(len(y_force)))
         
         #self.graphWidget2.setOpts(height=new_height)
         self.force_line.setData(x, y_force)  # Update the data
         self.pos_line.setData(x, y_pos)
 
-    def update_callback_plot(self, data_source):
+    def update_callback_plot(self):
         """ Graphs data from the probe data buffer"""
-        y_force = data_source[:,1] 
-        y_pos = data_source[:,0]
-     
-        #self.graphWidget2.setOpts(height=new_height)
-        self.recall_force_line.setData(x, y_force)
-        self.recall_pos_line.setData(x, y_pos)
+        if self.radio1.isChecked():
+            try:
+                y_force = self.data_session[:,1] 
+                y_pos = self.data_session[:,0]
+                x = list(range(len(y_force)))
+                #self.graphWidget2.setOpts(height=new_height)
+                self.recall_force_line.setData(x, y_force)
+                self.recall_pos_line.setData(x, y_pos)
+            except:
+                print("Could not display current data.")
+        elif self.radio2.isChecked():
+            try:
+                y_force = self.loaded_data[:,1] 
+                y_pos = self.loaded_data[:,0]
+                x = list(range(len(y_force)))
+                #self.graphWidget2.setOpts(height=new_height)
+                self.recall_force_line.setData(x, y_force)
+                self.recall_pos_line.setData(x, y_pos)
+            except:
+                print("Could not display loaded data.")
     
     def save_data(self):
         """Writes all the data to the specified filename"""
@@ -232,18 +260,28 @@ class MainWindow(QMainWindow):
             return
         # Write the data to the specified file
         final_path = os.path.join(self.data_path, filename)
-        np.save(final_path, self.data_session)
 
+        np.savetxt(final_path + ".csv", self.data_session, delimiter=",")
+        #np.save(final_path, self.data_session)
 
     def record_buffer(self):
         """ Records the data in the buffer to a file"""
         print("Recording data...")
         self.data_session = copy.deepcopy(self.data_buffer.bufdata)
+        self.update_callback_plot()
         print("Data recorded.")
 
+    def load_data(self):
+        """ Loads the data from the specified file"""
+        try:
+            print("Loading data...")
+            self.loaded_data = np.loadtxt(self.filePath, delimiter=",")
+            print("Data loaded.")
+        except:
+            print("Failed to load data. Check if file is in the correct format.")
     
     def queue_to_buffer(self):
-        """ Pulls data from the """
+        """ Pulls data from the queue and adds it to the buffer"""
         items = []
         while not self.data_q.empty():
             try:
@@ -260,9 +298,6 @@ class MainWindow(QMainWindow):
 
     def interp_state():
         print("Current State:")
-
-    def on_click(self):
-        print("Button clicked")
 
     def retract_probe(self):
         try:
@@ -286,6 +321,7 @@ class MainWindow(QMainWindow):
         self.worker_thread.start()
         # Make the thread a daemon
         self.worker_thread.deamon = True
+
 
     def test_stiffness_thread(self):
         try:
