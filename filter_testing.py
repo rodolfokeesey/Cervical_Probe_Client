@@ -19,15 +19,15 @@ x = list(range(len(y_force)))
 
 # # filter the positional data
 
-# filtered_pos = median_filter(y_pos, size=5)
+filtered_pos = median_filter(y_pos, size=5)
 
-# plt.figure(figsize=(10, 5))
-# #plt.plot(y_pos, label='Original')
-# plt.plot(filtered_pos, label='Filtered')
-# plt.legend()
-# plt.title('Time Series Data: Original vs. Median Filtered')
-# plt.xlabel('Index')
-# plt.ylabel('Value')
+plt.figure(figsize=(10, 5))
+#plt.plot(y_pos, label='Original')
+plt.plot(filtered_pos, label='Filtered')
+plt.legend()
+plt.title('Time Series Data: Original vs. Median Filtered')
+plt.xlabel('Index')
+plt.ylabel('Value')
 
 # # Find the start points of the signal
 

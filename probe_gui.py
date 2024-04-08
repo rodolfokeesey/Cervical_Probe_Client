@@ -52,7 +52,11 @@ class MainWindow(QMainWindow):
 
         # Initialize probe parameters
         self.num_channels = 2
-        self.fs = 80
+        self.fs = 80 # Sampling frequency
+        self.h = 0.003 # indentation in meters
+        self.v = 0.5 # What is this?
+        self.R = 0.0024052 # radius of the probe in meters
+
         # Create the data buffer to hold the data
         self.data_buffer = pb.ProbeBuffer(self.num_channels, self.fs)
         # Initialize the stream
@@ -67,12 +71,47 @@ class MainWindow(QMainWindow):
         self.recall_force_line = self.recall_pos.plot([], [], pen = 'red')
         self.recall_pos_line  = self.recall_force.plot([], [], pen = 'green')
 
+        # Initialize plot detection windows
+        num_reps = 3 # Number of repetitions in a single trial
+        t0_start = [225, 408, 588]
+        t0_end = [250, 428, 608]
+        tf_start = [255, 430, 613]
+        tf_end = [315, 490, 673]
+        self.detection_windows:list[list] = [[] for x in range(num_reps * 2)]
+        self.det_current_bound:list[list] = [[t0_start[x], t0_end[x], tf_start[x], tf_end[x]] for x in range(num_reps)]
+        
+        # Creates detection windows for each plot
+        detection_windows:list[pg.InfiniteLine] = []
+        # range is hardcoded 4 because we have 2 windows, each defined with a start value and end value
+        # these values are keyed to the following [m_start, m_end, h_start, h_end]
+        for rep in range(num_reps):
+            for i in range(4):
+                # if i is 0 or 1, we are doing the M-Response, if 2 or 3, we are doing the H-response
+                if i == 0 or i == 1:
+                    line = pg.InfiniteLine(pos = self.det_current_bound[rep][i], pen = '#FD003A', movable=True, angle=90, name=[rep,i])
+                elif i == 2 or i == 3:
+                    line = pg.InfiniteLine(pos = self.det_current_bound[rep][i], pen = '#5BA4C4', movable=True, angle=90, name=[rep,i])
+                else:
+                    line = pg.InfiniteLine(pos = self.det_current_bound[rep][i], movable=True, angle=90, name=[rep,i])
+                # if "i" is 0 or 2, then we are creating the starting bound line
+                if i == 0 or i == 2:
+                    line.addMarker('|>')
+                elif i == 1 or i == 3:
+                    line.addMarker('<|')
+                else:
+                    line.addMarker('|')
+                line.sigPositionChangeFinished.connect(self.line_pos)
+                self.recall_pos.addItem(line)
+                #self.recall_force.addItem(line)
+                self.detection_windows[rep].insert(i,line)
+
+
         self.init_ui()
 
         # Initialize the timer to record all the data in the buffer
         self.record_timer = QTimer()
         self.record_timer.setSingleShot(True)
-        self.record_timer.setInterval(5000)  # Interval in milliseconds
+        self.record_timer.setInterval(7000)  # Interval in milliseconds
         self.record_timer.timeout.connect(self.record_buffer)
 
 
@@ -122,6 +161,44 @@ class MainWindow(QMainWindow):
         col2 = QVBoxLayout()
         col2.addWidget(self.recall_pos)
         col2.addWidget(self.recall_force)
+
+        # Manually set the initial and final force values, then add the sublayout
+        force_sublay = QHBoxLayout()
+        self.f0_val = [0, 0, 0]
+        self.ff_val = [0, 0, 0]
+        #self.calculate_force()
+        self.f1_0 = QLabel(f"Rep 1 Initial Force: {self.f0_val[0]}")
+        self.f1_f = QLabel(f"Rep 1 Final Force: {self.ff_val[0]}")
+        self.f2_0 = QLabel(f"Rep 2 Initial Force: {self.f0_val[1]}")
+        self.f2_f = QLabel(f"Rep 2 Final Force: {self.ff_val[1]}")
+        self.f3_0 = QLabel(f"Rep 3 Initial Force: {self.f0_val[2]}")
+        self.f3_f = QLabel(f"Rep 3 Final Force: {self.ff_val[2]}")
+        force_sublay.addWidget(self.f1_0)
+        force_sublay.addWidget(self.f1_f)
+        force_sublay.addWidget(self.f2_0)
+        force_sublay.addWidget(self.f2_f)
+        force_sublay.addWidget(self.f3_0)
+        force_sublay.addWidget(self.f3_f)
+        col2.addLayout(force_sublay)
+
+        # Manually set the initial calculated stiffness values,
+        stiffness_sublay = QHBoxLayout()
+        self.stiffness = [0, 0, 0]
+        self.stiffness_ave = [0]
+        self.stiffnes_dev = [0]
+        self.calculate_stiffness()
+
+        self.r1s = QLabel(f"Rep 1 Stiffness: {self.stiffness[0]}")
+        self.r2s = QLabel(f"Rep 2 Stiffness: {self.stiffness[1]}")
+        self.r3s = QLabel(f"Rep 3 Stiffness: {self.stiffness[2]}")
+        self.s_ave = QLabel(f"Average Stiffness: {self.stiffness_ave[0]}")
+        self.s_dev = QLabel(f"Stiffness Deviation: {self.stiffnes_dev[0]}")
+        stiffness_sublay.addWidget(self.r1s)
+        stiffness_sublay.addWidget(self.r2s)
+        stiffness_sublay.addWidget(self.r3s)
+        stiffness_sublay.addWidget(self.s_ave)
+        stiffness_sublay.addWidget(self.s_dev)
+        col2.addLayout(stiffness_sublay)
 
         # Real Time Plot Layout (column 3)
         layout = QVBoxLayout()
@@ -228,6 +305,69 @@ class MainWindow(QMainWindow):
         self.force_line.setData(x, y_force)  # Update the data
         self.pos_line.setData(x, y_pos)
 
+    def line_pos(self, obj):
+        """ This function is called when the detection lines are moved. It updates the self.det_current_bound attribute
+        to the value of the detection line. It also sorts the detection bounds so that the lower bound line can never be
+        above the upper bound line, and vis versa.
+        
+        """
+        keyIdx = obj.name()[0]
+        lineIdx = obj.name()[1]
+        # obj.name[0] is the device, obj.name[1] is the sub-plot
+        self.det_current_bound[keyIdx][lineIdx] = obj.value()
+        # Sort the order of the bounds pairwise
+        m_sort = sorted(self.det_current_bound[keyIdx][0:2])
+        h_sort = sorted(self.det_current_bound[keyIdx][2:4])
+        # Reassign our detection bounds to our sorted bounds
+        self.det_current_bound[keyIdx][0:2] = m_sort
+        self.det_current_bound[keyIdx][2:4] = h_sort
+        # Reassign our plotting lines accordingly to the new sorted bounds
+        m_lower = self.det_current_bound[keyIdx][0]
+        m_upper = self.det_current_bound[keyIdx][1]
+        h_lower = self.det_current_bound[keyIdx][2]
+        h_upper = self.det_current_bound[keyIdx][3]
+        self.detection_windows[keyIdx][0].setValue(m_lower)  # The line object itself
+        self.detection_windows[keyIdx][1].setValue(m_upper) # The line object itself
+        self.detection_windows[keyIdx][2].setValue(h_lower)  # The line object itself
+        self.detection_windows[keyIdx][3].setValue(h_upper) # The line object itself
+
+    def calculate_force(self):
+        """ Calculates/updates the force values from the detection windows"""
+        # Unpack the detection windows
+        r1_f0_start = self.det_current_bound[0][0]
+        r1_f0_end = self.det_current_bound[0][1]
+        r1_ff_start = self.det_current_bound[0][2]
+        r1_ff_end = self.det_current_bound[0][3]
+        r2_f0_start = self.det_current_bound[1][0]
+        r2_f0_end = self.det_current_bound[1][1]
+        r2_ff_start = self.det_current_bound[1][2]
+        r2_ff_end = self.det_current_bound[1][3]
+        r3_f0_start = self.det_current_bound[2][0]
+        r3_f0_end = self.det_current_bound[2][1]
+        r3_ff_start = self.det_current_bound[2][2]
+        r3_ff_end = self.det_current_bound[2][3]
+        # Get the force values from the detection windows
+        force = self.loaded_data[:,1]
+        ff[0], ff[1], ff[2] = np.max(force[r1_ff_start:r1_ff_end]), np.max(force[r2_ff_start:r2_ff_end]), np.max(force[r3_ff_start:r3_ff_end])
+        fi[0], fi[1], fi[2] = np.max(force[r1_f0_start:r1_f0_end]), np.max(force[r2_f0_start:r2_f0_end]), np.max(force[r3_f0_start:r3_f0_end])
+        # Update the force labels
+        self.f0_val = fi
+        self.ff_val = ff
+
+        pass
+
+    def calculate_stiffness(self):
+        """ Takes the initial and force values and calculates the stiffness"""
+        P1 = self.ff_val[0] - self.f0_val[0] # force in newtons
+        P2 = self.ff_val[1] - self.f0_val[1] # force in newtons
+        P3 = self.ff_val[2] - self.f0_val[2] # force in newtons
+
+        self.stiffness[0] = (0.75 * P1 * (1 - self.v**2)) / (self.R**0.5 * self.h**(3/2))
+        self.stiffness[1] = (0.75 * P2 * (1 - self.v**2)) / (self.R**0.5 * self.h**(3/2))
+        self.stiffness[2] = (0.75 * P3 * (1 - self.v**2)) / (self.R**0.5 * self.h**(3/2))
+        self.s_ave = np.mean(self.stiffness)
+        self.s_dev = np.std(self.stiffness)
+
     def update_callback_plot(self):
         """ Graphs data from the probe data buffer"""
         if self.radio1.isChecked():
@@ -330,17 +470,17 @@ class MainWindow(QMainWindow):
             self.probe.send_command("retract")
             time.sleep(0.5)
             self.probe.send_command("extend")
-            time.sleep(0.5)
+            time.sleep(1)
             self.probe.send_command("retract")
             print("Trial Two...")
             time.sleep(1)
             self.probe.send_command("extend")
-            time.sleep(0.5)
+            time.sleep(1)
             self.probe.send_command("retract")
             print("Trial Three...")
             time.sleep(1)
             self.probe.send_command("extend")
-            time.sleep(0.5)
+            time.sleep(1)
             self.probe.send_command("retract")
         except:
             print("Failed to send command")

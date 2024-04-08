@@ -20,5 +20,5 @@ class ProbeBuffer:
 
     def convert_to_newtons(self, data: np.ndarray):
         data_array = np.array(data)
-        data_array[:,1] = -1 * (data_array[:,1] * self.cal_slope + self.cal_intercept)
+        data_array[:,1] = 1 * (data_array[:,1] * self.cal_slope + self.cal_intercept)
         return data_array.tolist()
