@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
         # Initialize probe parameters
         self.num_channels = 2
         self.fs = 80 # Sampling frequency
-        self.h = 0.002 # indentation in meters
+        self.h = 0.004 # indentation in meters
         self.v = 0.5 # What is this?
         self.R = 0.0024052 # radius of the probe in meters
 
@@ -75,8 +75,8 @@ class MainWindow(QMainWindow):
         num_reps = 3 # Number of repetitions in a single trial
         t0_start = [225, 408, 588]
         t0_end = [250, 428, 608]
-        tf_start = [251, 430, 612]
-        tf_end = [311, 490, 672]
+        tf_start = [251, 430, 610]
+        tf_end = [311, 490, 670]
         self.detection_windows:list[list] = [[] for x in range(num_reps * 2)]
         self.det_current_bound:list[list] = [[t0_start[x], t0_end[x], tf_start[x], tf_end[x]] for x in range(num_reps)]
         
