@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
         # Initialize probe parameters
         self.num_channels = 2
         self.fs = 80 # Sampling frequency
-        self.h = 0.003 # indentation in meters
+        self.h = 0.002 # indentation in meters
         self.v = 0.5 # What is this?
         self.R = 0.0024052 # radius of the probe in meters
 
@@ -75,8 +75,8 @@ class MainWindow(QMainWindow):
         num_reps = 3 # Number of repetitions in a single trial
         t0_start = [225, 408, 588]
         t0_end = [250, 428, 608]
-        tf_start = [255, 430, 613]
-        tf_end = [315, 490, 673]
+        tf_start = [251, 430, 612]
+        tf_end = [311, 490, 672]
         self.detection_windows:list[list] = [[] for x in range(num_reps * 2)]
         self.det_current_bound:list[list] = [[t0_start[x], t0_end[x], tf_start[x], tf_end[x]] for x in range(num_reps)]
         
@@ -166,7 +166,6 @@ class MainWindow(QMainWindow):
         force_sublay = QHBoxLayout()
         self.f0_val = [0, 0, 0]
         self.ff_val = [0, 0, 0]
-        #self.calculate_force()
         self.f1_0 = QLabel(f"Rep 1 Initial Force: {self.f0_val[0]}")
         self.f1_f = QLabel(f"Rep 1 Final Force: {self.ff_val[0]}")
         self.f2_0 = QLabel(f"Rep 2 Initial Force: {self.f0_val[1]}")
@@ -186,7 +185,6 @@ class MainWindow(QMainWindow):
         self.stiffness = [0, 0, 0]
         self.stiffness_ave = [0]
         self.stiffnes_dev = [0]
-        self.calculate_stiffness()
 
         self.r1s = QLabel(f"Rep 1 Stiffness: {self.stiffness[0]}")
         self.r2s = QLabel(f"Rep 2 Stiffness: {self.stiffness[1]}")
@@ -331,7 +329,7 @@ class MainWindow(QMainWindow):
         self.detection_windows[keyIdx][2].setValue(h_lower)  # The line object itself
         self.detection_windows[keyIdx][3].setValue(h_upper) # The line object itself
 
-    def calculate_force(self):
+    def calculate_force(self,input_force):
         """ Calculates/updates the force values from the detection windows"""
         # Unpack the detection windows
         r1_f0_start = self.det_current_bound[0][0]
@@ -347,14 +345,20 @@ class MainWindow(QMainWindow):
         r3_ff_start = self.det_current_bound[2][2]
         r3_ff_end = self.det_current_bound[2][3]
         # Get the force values from the detection windows
-        force = self.loaded_data[:,1]
+        force = input_force[:]
+        ff = np.zeros((3))
+        fi = np.zeros((3))
         ff[0], ff[1], ff[2] = np.max(force[r1_ff_start:r1_ff_end]), np.max(force[r2_ff_start:r2_ff_end]), np.max(force[r3_ff_start:r3_ff_end])
         fi[0], fi[1], fi[2] = np.max(force[r1_f0_start:r1_f0_end]), np.max(force[r2_f0_start:r2_f0_end]), np.max(force[r3_f0_start:r3_f0_end])
         # Update the force labels
         self.f0_val = fi
         self.ff_val = ff
-
-        pass
+        self.f1_0.setText(f"Rep 1 Initial Force: {round(self.f0_val[0],3)}")
+        self.f1_f.setText(f"Rep 1 Final Force: {round(self.ff_val[0],3)}")
+        self.f2_0.setText(f"Rep 2 Initial Force: {round(self.f0_val[1],3)}")
+        self.f2_f.setText(f"Rep 2 Final Force: {round(self.ff_val[1],3)}")
+        self.f3_0.setText(f"Rep 3 Initial Force: {round(self.f0_val[2],3)}")
+        self.f3_f.setText(f"Rep 3 Final Force: {round(self.ff_val[2],3)}")
 
     def calculate_stiffness(self):
         """ Takes the initial and force values and calculates the stiffness"""
@@ -365,8 +369,14 @@ class MainWindow(QMainWindow):
         self.stiffness[0] = (0.75 * P1 * (1 - self.v**2)) / (self.R**0.5 * self.h**(3/2))
         self.stiffness[1] = (0.75 * P2 * (1 - self.v**2)) / (self.R**0.5 * self.h**(3/2))
         self.stiffness[2] = (0.75 * P3 * (1 - self.v**2)) / (self.R**0.5 * self.h**(3/2))
-        self.s_ave = np.mean(self.stiffness)
-        self.s_dev = np.std(self.stiffness)
+        self.stiffness_ave = np.mean(self.stiffness)
+        self.stiffness_dev = np.std(self.stiffness)
+        # Update the stiffness labels
+        self.r1s.setText(f"Rep 1 Stiffness: {round(self.stiffness[0],3)}")
+        self.r2s.setText(f"Rep 2 Stiffness: {round(self.stiffness[1],3)}")
+        self.r3s.setText(f"Rep 3 Stiffness: {round(self.stiffness[2],3)}")
+        self.s_ave.setText(f"Average Stiffness: {round(self.stiffness_ave,3)}")
+        self.s_dev.setText(f"Stiffness Deviation: {round(self.stiffness_dev,3)}")
 
     def update_callback_plot(self):
         """ Graphs data from the probe data buffer"""
@@ -378,6 +388,8 @@ class MainWindow(QMainWindow):
                 #self.graphWidget2.setOpts(height=new_height)
                 self.recall_force_line.setData(x, y_force)
                 self.recall_pos_line.setData(x, y_pos)
+                self.calculate_force(y_force)
+                self.calculate_stiffness()
             except:
                 print("Could not display current data.")
         elif self.radio2.isChecked():
@@ -388,6 +400,8 @@ class MainWindow(QMainWindow):
                 #self.graphWidget2.setOpts(height=new_height)
                 self.recall_force_line.setData(x, y_force)
                 self.recall_pos_line.setData(x, y_pos)
+                self.calculate_force(y_force)
+                self.calculate_stiffness()
             except:
                 print("Could not display loaded data.")
     
