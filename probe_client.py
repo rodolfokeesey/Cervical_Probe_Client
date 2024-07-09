@@ -1,4 +1,5 @@
 import serial
+import struct
 import time
 import random
 import threading
@@ -18,7 +19,7 @@ class CervicalProbe:
     def connect(self):
         if not self.connected:
             try:
-                self.ser = serial.Serial('COM5', 115200, timeout = 1)
+                self.ser = serial.Serial('COM4', 115200, timeout = 1)
                 self.connected = True
             except:
                 print("Failed to connect")
@@ -36,11 +37,23 @@ class CervicalProbe:
     def send_command(self,command):
         # encodes the string to bytes
         self.ser.write(command.encode('utf-8') + b'\n')
+    
+    def send_command_int(self, int1, int2):
+        """
+        Sends a command to the cervical probe with two integer arguments. The first integer gives
+        the direction to move the probe in, and the second integer gives the number of steps to move.
+        """
+        
+        bytes_to_send = struct.pack('<ii', int1, int2)
+        self.ser.write(bytes_to_send)
 
     def receive_data(self):
-        # Reads one line from the serial port
-        # Decode bytes to string and strip newline characters, then split based on commas
-        data = self.ser.readline().decode('utf-8').rstrip().split(",") 
+        """
+        Reads one line from the serial port
+        Decode bytes to string and strip newline characters, then split based on commas
+        """
+        
+        data = self.ser.readline().decode('utf-8').rstrip().split(",")
         data = [float(i) for i in data]
         return data
     
@@ -55,7 +68,12 @@ class CervicalProbe:
     
     def stream_worker(self, queue: Queue[list[float]]):
         while self.streaming == True:
+            try:
+                prev_position = data[0]
+            except:
+                prev_position = 0
             data = self.receive_data()
+            data[0] = self.low_pass_filter(data[0], prev_position, 0.1)
             queue.put(data)
         
     def start_stream(self):
@@ -83,4 +101,11 @@ class CervicalProbe:
             data = [random.randint(10, 20), random.randint(1, 5)]
             time.sleep(.0125)
             queue.put(data)
+    
+    def low_pass_filter(self,current_value, previous_filtered_value, alpha):
+        """
+        Simple exponential moving average low pass filter.
+        alpha: smoothing factor within [0, 1], where closer to 1 is less smoothing.
+        """
+        return alpha * current_value + (1 - alpha) * previous_filtered_value
         

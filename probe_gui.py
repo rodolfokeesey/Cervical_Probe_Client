@@ -479,23 +479,8 @@ class MainWindow(QMainWindow):
 
     def test_stiffness_thread(self):
         try:
-            print("Testing Stiffness...")
-            print("Trial One...")
-            self.probe.send_command("retract")
-            time.sleep(0.5)
-            self.probe.send_command("extend")
-            time.sleep(1)
-            self.probe.send_command("retract")
-            print("Trial Two...")
-            time.sleep(1)
-            self.probe.send_command("extend")
-            time.sleep(1)
-            self.probe.send_command("retract")
-            print("Trial Three...")
-            time.sleep(1)
-            self.probe.send_command("extend")
-            time.sleep(1)
-            self.probe.send_command("retract")
+            for i in range(1000):
+                self.probe.send_command("extend")
         except:
             print("Failed to send command")
 
