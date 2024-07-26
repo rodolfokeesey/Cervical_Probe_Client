@@ -18,7 +18,7 @@ class CervicalProbe:
     def connect(self):
         if not self.connected:
             try:
-                self.ser = serial.Serial('COM5', 115200, timeout = 1)
+                self.ser = serial.Serial('COM3', 115200, timeout = 1)
                 self.connected = True
             except:
                 print("Failed to connect")
