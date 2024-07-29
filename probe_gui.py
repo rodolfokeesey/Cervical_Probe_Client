@@ -210,12 +210,24 @@ class MainWindow(QMainWindow):
 
         # Retract Button
         ret_btn = QPushButton('Retract', self)
-        ret_btn.clicked.connect(self.retract_probe)  # Connect to a function
+        ret_btn.pressed.connect(self.retract_probe)  # Connect to a function
+        ret_btn.released.connect(self.stop_movement)
         sublay2.addWidget(ret_btn)
+        # Retract Position Entry Field
+        ret_pos = QLineEdit()
+
         # Extend Button
         ext_btn = QPushButton('Extend', self)
-        ext_btn.clicked.connect(self.extend_probe)  # Connect to a function
+        ext_btn.pressed.connect(self.extend_probe)  # Connect to a function
+        ext_btn.released.connect(self.stop_movement)
         sublay2.addWidget(ext_btn)
+
+        # Home Button
+        home_btn = QPushButton('Home', self)
+        home_btn.pressed.connect(self.home_retract)  # Connect to a function
+        home_btn.released.connect(self.home_position)
+        sublay2.addWidget(home_btn)
+
         # Test Stiffness Button
         tst_btn = QPushButton('Test Stiffness', self)
         tst_btn.clicked.connect(self.test_stiffness)  # Connect to a function
@@ -455,14 +467,33 @@ class MainWindow(QMainWindow):
 
     def retract_probe(self):
         try:
-            self.probe.send_command_int(0,128)
+            self.probe.send_command_int(0, 128, 0)
             print("Retracting Probe...")
+        except:
+            print("Failed to send command")
+
+    def stop_movement(self):
+        try:
+            self.probe.send_command_int(0, 0, 0)
+        except:
+            print("Failed to send command")
+
+    def home_retract(self):
+        try:
+            self.probe.send_command_int(-100, 128, 0)
+        except:
+            print("Failed to send command")
+
+    def home_position(self):
+        try:
+            self.probe.send_command_int(0, 0, 1)
+            print("Reset home position to current position...")
         except:
             print("Failed to send command")
 
     def extend_probe(self):
         try:
-            self.probe.send_command_int(3,128)
+            self.probe.send_command_int(40, 128, 0)
             print("Extending Probe...")
         except:
             print("Failed to send command")
