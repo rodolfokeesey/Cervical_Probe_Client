@@ -38,13 +38,13 @@ class CervicalProbe:
         # encodes the string to bytes
         self.ser.write(command.encode('utf-8') + b'\n')
     
-    def send_command_int(self, int1, int2):
+    def send_command_int(self, float1, int2):
         """
         Sends a command to the cervical probe with two integer arguments. The first integer gives
         the direction to move the probe in, and the second integer gives the number of steps to move.
         """
         
-        bytes_to_send = struct.pack('<ii', int1, int2)
+        bytes_to_send = struct.pack('<fi', float1, int2)
         self.ser.write(bytes_to_send)
 
     def receive_data(self):
@@ -54,7 +54,10 @@ class CervicalProbe:
         """
         
         data = self.ser.readline().decode('utf-8').rstrip().split(",")
-        data = [float(i) for i in data]
+        try: 
+            data = [float(i) for i in data]
+        except:
+            print("Failed to convert data to float")
         return data
     
     def handle_stream(self, queue: Queue[list[float]]):

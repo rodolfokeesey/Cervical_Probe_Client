@@ -455,14 +455,14 @@ class MainWindow(QMainWindow):
 
     def retract_probe(self):
         try:
-            self.probe.send_command_int(1,10)
+            self.probe.send_command_int(0,128)
             print("Retracting Probe...")
         except:
             print("Failed to send command")
 
     def extend_probe(self):
         try:
-            self.probe.send_command_int(0,10)
+            self.probe.send_command_int(3,128)
             print("Extending Probe...")
         except:
             print("Failed to send command")
