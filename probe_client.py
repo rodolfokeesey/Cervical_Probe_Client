@@ -110,5 +110,9 @@ class CervicalProbe:
         Simple exponential moving average low pass filter.
         alpha: smoothing factor within [0, 1], where closer to 1 is less smoothing.
         """
-        return alpha * current_value + (1 - alpha) * previous_filtered_value
+        try:
+            fval = alpha * current_value + (1 - alpha) * previous_filtered_value
+        except:
+            fval = current_value
+        return fval #alpha * current_value + (1 - alpha) * previous_filtered_value
         
