@@ -1,0 +1,12 @@
+numpy
+PySide6
+pyqtgraph
+datetime
+pandas
+matplotlib
+seaborn
+scipy
+nidaqmx
+openpyxl
+qtm
+pywin32
